@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+dist/
+dist-electron/
+out/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Build artifacts
+*.exe
+*.dmg
+*.deb
+*.AppImage
+*.snap
+release/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# SQLite DB (user data — never commit)
+*.db
+*.sqlite
+*.sqlite3
+
+# TypeScript
+*.tsbuildinfo
+
+# Temp
+.temp/
+.cache/
