@@ -27,10 +27,11 @@ export function encrypt(text: string, masterKey: string = DEV_MASTER_KEY): strin
 }
 
 export function decrypt(encryptedText: string, masterKey: string = DEV_MASTER_KEY): string {
-  const [ivHex, authTagHex, encrypted] = encryptedText.split(':');
-  if (!ivHex || !authTagHex || !encrypted) {
+  const parts = encryptedText.split(':');
+  if (parts.length !== 3 || !parts[0] || !parts[1]) {
     throw new Error('Malformed encrypted value');
   }
+  const [ivHex, authTagHex, encrypted] = parts;
 
   const key = deriveKey(masterKey);
   const iv = Buffer.from(ivHex, 'hex');
