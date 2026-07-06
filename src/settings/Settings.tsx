@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Download, Upload } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ArrowDownTrayIcon, ArrowUpTrayIcon } from '@heroicons/react/20/solid';
 import { ipc } from '../shared/ipc-client';
-import { useTheme } from '../shared/useTheme';
 import { DEFAULT_HOTKEY } from '../shared/constants';
 import { Button } from '../shared/ui/Button';
 import { Switch } from '../shared/ui/Switch';
+import { Kbd } from '../shared/ui/Kbd';
 
 function codeToAcceleratorKey(code: string): string | null {
   if (code.startsWith('Key')) return code.slice(3);
@@ -33,23 +33,50 @@ function formatAccelerator(e: KeyboardEvent): string | null {
   return parts.join('+');
 }
 
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-1.5 text-caption font-semibold uppercase tracking-wide text-ink-muted">{title}</h2>
+      <div className="overflow-hidden rounded-card border border-stroke bg-card shadow-elevation-1">{children}</div>
+    </section>
+  );
+}
+
+function SettingsRow({
+  title,
+  description,
+  children,
+  divider = false
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+  divider?: boolean;
+}) {
+  return (
+    <div className={'flex items-center gap-4 px-4 py-3' + (divider ? ' border-b border-stroke-subtle' : '')}>
+      <div className="min-w-0 flex-1">
+        <p className="text-body font-medium text-ink">{title}</p>
+        {description && <p className="mt-0.5 text-label text-ink-muted">{description}</p>}
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
 export function Settings() {
-  useTheme();
   const [hotkey, setHotkey] = useState(DEFAULT_HOTKEY);
   const [recording, setRecording] = useState(false);
   const [launchAtStartup, setLaunchAtStartup] = useState(true);
-  const [theme, setThemeState] = useState<'dark' | 'light'>('dark');
   const [version, setVersion] = useState('');
   const [capabilities, setCapabilities] = useState({ autoPaste: true, textExpansion: true });
-  const [exportStatus, setExportStatus] = useState<string | null>(null);
-  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [dataStatus, setDataStatus] = useState<string | null>(null);
 
   useEffect(() => {
     void ipc.getSettings().then((s) => {
-      const settings = s as { hotkey?: string; launchAtStartup?: boolean; theme?: 'dark' | 'light' };
+      const settings = s as { hotkey?: string; launchAtStartup?: boolean };
       setHotkey(settings.hotkey ?? DEFAULT_HOTKEY);
       setLaunchAtStartup(settings.launchAtStartup ?? true);
-      setThemeState(settings.theme ?? 'dark');
     });
     void ipc.getAppVersion().then(setVersion);
     void ipc.getCapabilities().then(setCapabilities);
@@ -78,87 +105,76 @@ export function Settings() {
     await ipc.setSetting('launchAtStartup', checked);
   }
 
-  async function toggleTheme(checked: boolean) {
-    const next = checked ? 'light' : 'dark';
-    setThemeState(next);
-    document.documentElement.classList.toggle('light', next === 'light');
-    document.documentElement.classList.toggle('dark', next !== 'light');
-    await ipc.setSetting('theme', next);
-  }
-
   async function handleExport() {
-    setExportStatus(null);
+    setDataStatus(null);
     const result = await ipc.exportVault();
-    setExportStatus(result.ok ? `Exported to ${result.path}` : 'Export cancelled');
+    setDataStatus(result.ok ? `Exported to ${result.path}` : 'Export cancelled');
   }
 
   async function handleImport() {
-    setImportStatus(null);
+    setDataStatus(null);
     const result = await ipc.importVault();
-    setImportStatus(result.ok ? 'Vault imported successfully' : 'Import cancelled');
+    setDataStatus(result.ok ? 'Vault imported successfully' : 'Import cancelled');
   }
 
+  const hotkeyParts = hotkey.replace('CommandOrControl', 'Ctrl').split('+');
+
   return (
-    <div className="flex h-screen w-screen flex-col bg-bg-primary p-6 text-text-primary">
-      <h1 className="mb-6 text-lg font-semibold">Settings</h1>
+    <div className="flex h-screen w-screen flex-col overflow-y-auto bg-canvas px-6 py-5 text-ink">
+      <h1 className="mb-4 font-display text-display">Settings</h1>
 
-      <div className="flex flex-col gap-6 overflow-y-auto">
-        <section>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Global Hotkey</h2>
-          <div className="flex items-center justify-between rounded-lg border border-border bg-bg-card px-4 py-3">
-            <span className="rounded bg-bg-hover px-2 py-1 font-mono text-sm">
-              {recording ? 'Press a key combination…' : hotkey}
-            </span>
-            <Button size="sm" variant="outline" onClick={() => setRecording(true)} disabled={recording}>
-              {recording ? 'Recording…' : 'Change'}
+      <div className="flex flex-col gap-4">
+        <SettingsGroup title="Hotkey">
+          <SettingsRow
+            title="Open popup"
+            description={recording ? 'Press a key combination, or Esc to cancel' : 'Works anywhere in Windows'}
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="flex items-center gap-1">
+                {recording ? (
+                  <span className="text-label text-accent">Recording…</span>
+                ) : (
+                  hotkeyParts.map((part) => <Kbd key={part}>{part}</Kbd>)
+                )}
+              </span>
+              <Button size="sm" variant="secondary" onClick={() => setRecording(true)} disabled={recording}>
+                Change
+              </Button>
+            </div>
+          </SettingsRow>
+        </SettingsGroup>
+
+        <SettingsGroup title="General">
+          <SettingsRow title="Launch at startup" description="Start FormVault automatically when you sign in">
+            <Switch checked={launchAtStartup} onChange={(v) => void toggleLaunchAtStartup(v)} label="Launch at startup" />
+          </SettingsRow>
+        </SettingsGroup>
+
+        <SettingsGroup title="Data">
+          <SettingsRow divider title="Export vault" description="Save all profiles and fields as a JSON file">
+            <Button size="sm" variant="secondary" onClick={() => void handleExport()}>
+              <ArrowDownTrayIcon className="h-3.5 w-3.5" /> Export
             </Button>
-          </div>
-        </section>
+          </SettingsRow>
+          <SettingsRow title="Import vault" description="Restore from a previously exported file">
+            <Button size="sm" variant="secondary" onClick={() => void handleImport()}>
+              <ArrowUpTrayIcon className="h-3.5 w-3.5" /> Import
+            </Button>
+          </SettingsRow>
+        </SettingsGroup>
 
-        <section className="flex items-center justify-between rounded-lg border border-border bg-bg-card px-4 py-3">
-          <div>
-            <h2 className="text-sm font-medium">Launch at startup</h2>
-            <p className="text-xs text-text-muted">Start FormVault automatically when you sign in</p>
-          </div>
-          <Switch checked={launchAtStartup} onChange={(v) => void toggleLaunchAtStartup(v)} label="Launch at startup" />
-        </section>
-
-        <section className="flex items-center justify-between rounded-lg border border-border bg-bg-card px-4 py-3">
-          <div>
-            <h2 className="text-sm font-medium">Light mode</h2>
-            <p className="text-xs text-text-muted">FormVault defaults to dark mode</p>
-          </div>
-          <Switch checked={theme === 'light'} onChange={(v) => void toggleTheme(v)} label="Light mode" />
-        </section>
-
-        <section>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Data</h2>
-          <div className="flex flex-col gap-2 rounded-lg border border-border bg-bg-card px-4 py-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Export vault (encrypted JSON)</span>
-              <Button size="sm" variant="outline" onClick={() => void handleExport()}>
-                <Download size={14} /> Export
-              </Button>
-            </div>
-            {exportStatus && <p className="text-xs text-text-muted">{exportStatus}</p>}
-            <div className="mt-1 flex items-center justify-between">
-              <span className="text-sm">Import vault</span>
-              <Button size="sm" variant="outline" onClick={() => void handleImport()}>
-                <Upload size={14} /> Import
-              </Button>
-            </div>
-            {importStatus && <p className="text-xs text-text-muted">{importStatus}</p>}
-          </div>
-        </section>
+        {dataStatus && <p className="-mt-2 px-1 text-label text-ink-muted">{dataStatus}</p>}
 
         {(!capabilities.autoPaste || !capabilities.textExpansion) && (
-          <section className="rounded-lg border border-yellow-600/30 bg-yellow-500/10 px-4 py-3 text-xs text-yellow-500">
-            Auto-paste and/or text-expansion are unavailable on this machine because a native module hasn't been
-            compiled. Copy-to-clipboard still works everywhere.
-          </section>
+          <div className="rounded-card border border-warning/30 bg-warning/10 px-4 py-3 text-label text-warning">
+            Auto-paste and text expansion are unavailable — a native module hasn't been compiled on this machine.
+            Copy-to-clipboard still works everywhere. See the README for setup.
+          </div>
         )}
 
-        <section className="mt-auto text-xs text-text-muted">FormVault v{version || '0.1.0'} — Your data, one shortcut away</section>
+        <p className="mt-1 text-caption text-ink-muted">
+          FormVault {version ? `v${version}` : ''} — appearance follows your Windows theme.
+        </p>
       </div>
     </div>
   );
