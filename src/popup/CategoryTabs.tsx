@@ -15,16 +15,19 @@ export function CategoryTabs({ activeCategory, availableCategories, onSelect }: 
   ];
 
   return (
-    <div className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2">
+    <div role="tablist" aria-label="Categories" className="flex gap-1 overflow-x-auto px-3 pb-2.5">
       {tabs.map((tab) => (
         <button
           key={tab.id}
+          role="tab"
+          aria-selected={activeCategory === tab.id}
+          tabIndex={-1}
           onClick={() => onSelect(tab.id)}
           className={cn(
-            'shrink-0 rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150',
+            'shrink-0 rounded-full px-2.5 py-[3px] text-label font-medium transition-colors',
             activeCategory === tab.id
-              ? 'bg-accent text-white'
-              : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
+              ? 'bg-accent text-accent-ink'
+              : 'text-ink-secondary hover:bg-hover hover:text-ink'
           )}
         >
           {tab.label}

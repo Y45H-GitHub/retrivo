@@ -1,61 +1,84 @@
-import { useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { CheckIcon } from '@heroicons/react/20/solid';
 import { cn } from '../shared/cn';
 import { isSensitiveField, maskValue } from '../shared/mask';
+import { Kbd } from '../shared/ui/Kbd';
 import type { Field } from '../shared/types';
 
 interface FieldItemProps {
   field: Field;
   active: boolean;
   onSelect: (field: Field) => void;
+  onHover: () => void;
 }
 
-export function FieldItem({ field, active, onSelect }: FieldItemProps) {
+export function FieldItem({ field, active, onSelect, onHover }: FieldItemProps) {
   const [justCopied, setJustCopied] = useState(false);
+  const rowRef = useRef<HTMLButtonElement>(null);
 
-  const display = field.value
-    ? isSensitiveField(field.shortcut)
-      ? maskValue(field.value)
-      : field.value
-    : '(empty — click to fill in)';
+  useEffect(() => {
+    if (active) rowRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
+
+  const sensitive = isSensitiveField(field.shortcut);
+  const hasValue = field.value.length > 0;
+  const display = hasValue ? (sensitive ? maskValue(field.value) : field.value) : 'Empty — add a value in the vault';
 
   function handleSelect() {
-    if (!field.value) return;
+    if (!hasValue) return;
     setJustCopied(true);
     onSelect(field);
-    setTimeout(() => setJustCopied(false), 1500);
+    setTimeout(() => setJustCopied(false), 1200);
   }
 
   return (
     <button
+      ref={rowRef}
       onClick={handleSelect}
+      onMouseMove={onHover}
+      tabIndex={-1}
+      disabled={!hasValue}
       className={cn(
-        'group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors duration-150',
-        active ? 'bg-bg-hover' : 'hover:bg-bg-hover',
-        justCopied && 'animate-flash-success'
+        'flex w-full items-center gap-2.5 rounded-control px-2 py-1.5 text-left transition-colors',
+        active && !justCopied && 'bg-active',
+        justCopied && 'bg-success/15',
+        !hasValue && 'opacity-55'
       )}
     >
-      <span className="text-lg leading-none">{field.icon}</span>
+      <span
+        aria-hidden
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-hover text-[15px] leading-none"
+      >
+        {field.icon}
+      </span>
+
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs text-text-secondary">{field.label}</span>
-        <span className={cn('block truncate text-sm', field.value ? 'text-text-primary' : 'italic text-text-muted')}>
+        <span className="block truncate text-body font-medium text-ink">{field.label}</span>
+        <span
+          className={cn(
+            'block truncate text-label',
+            sensitive && hasValue ? 'font-mono text-ink-secondary' : 'text-ink-secondary',
+            !hasValue && 'italic text-ink-muted'
+          )}
+        >
           {display}
         </span>
       </span>
-      <span className="shrink-0 text-xs font-medium text-accent">
+
+      <span className="flex shrink-0 items-center gap-1.5">
         {justCopied ? (
-          <span className="flex items-center gap-1 text-success">
-            <Check size={14} /> Copied
+          <span className="flex items-center gap-1 text-label font-medium text-success">
+            <CheckIcon className="h-3.5 w-3.5" /> Copied
           </span>
         ) : (
-          <span
-            className={cn(
-              'flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100',
-              active && 'opacity-100'
+          <>
+            {field.shortcut && <Kbd>{field.shortcut}</Kbd>}
+            {active && hasValue && (
+              <span className="flex items-center gap-1 text-label text-ink-muted">
+                <Kbd>↵</Kbd>
+              </span>
             )}
-          >
-            <Copy size={14} /> Copy
-          </span>
+          </>
         )}
       </span>
     </button>

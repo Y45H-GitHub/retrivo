@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Settings, X } from 'lucide-react';
+import { PlusIcon, Cog6ToothIcon } from '@heroicons/react/20/solid';
 import { ipc } from '../shared/ipc-client';
-import { useTheme } from '../shared/useTheme';
+import { CATEGORIES } from '../shared/constants';
+import { Kbd } from '../shared/ui/Kbd';
 import { CategoryTabs } from './CategoryTabs';
-import { FieldList } from './FieldList';
+import { FieldList, type ListedField } from './FieldList';
 import { ProfileSwitcher } from './ProfileSwitcher';
 import { SearchBar } from './SearchBar';
 import type { Category, Field, Profile } from '../shared/types';
 
+const CATEGORY_LABELS = new Map(CATEGORIES.map((c) => [c.id, c.label]));
+
 export function Popup() {
-  useTheme();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [fields, setFields] = useState<Field[]>([]);
@@ -60,9 +62,9 @@ export function Popup() {
 
   const availableCategories = useMemo(() => new Set(fields.map((f) => f.category)), [fields]);
 
-  const filteredFields = useMemo(() => {
+  const items = useMemo<ListedField[]>(() => {
     const q = query.trim().toLowerCase();
-    return fields
+    const filtered = fields
       .filter((f) => category === 'all' || f.category === category)
       .filter((f) => {
         if (!q) return true;
@@ -72,6 +74,14 @@ export function Popup() {
           (f.shortcut ?? '').toLowerCase().includes(q)
         );
       });
+
+    // In the "All" view, group rows under compact category headers.
+    let lastCategory: Category | null = null;
+    return filtered.map((field) => {
+      const showHeader = category === 'all' && field.category !== lastCategory;
+      lastCategory = field.category;
+      return showHeader ? { field, groupLabel: CATEGORY_LABELS.get(field.category) } : { field };
+    });
   }, [fields, category, query]);
 
   useEffect(() => {
@@ -80,7 +90,7 @@ export function Popup() {
 
   async function handleSelectField(field: Field) {
     await ipc.copyField(field.id, true);
-    setTimeout(() => void ipc.closePopup(), 550);
+    setTimeout(() => void ipc.closePopup(), 500);
   }
 
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -88,16 +98,16 @@ export function Popup() {
       void ipc.closePopup();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex((i) => Math.min(i + 1, filteredFields.length - 1));
+      setSelectedIndex((i) => Math.min(i + 1, items.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSelectedIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
-      const field = filteredFields[selectedIndex];
-      if (field) void handleSelectField(field);
+      const item = items[selectedIndex];
+      if (item) void handleSelectField(item.field);
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      const tabs: (Category | 'all')[] = ['all', ...Array.from(availableCategories)];
+      const tabs: (Category | 'all')[] = ['all', ...CATEGORIES.filter((c) => availableCategories.has(c.id)).map((c) => c.id)];
       const currentIndex = tabs.indexOf(category);
       const nextIndex = e.shiftKey
         ? (currentIndex - 1 + tabs.length) % tabs.length
@@ -107,42 +117,67 @@ export function Popup() {
   }
 
   return (
-    <div className="h-screen w-screen p-2">
-      <div className="flex h-full animate-slide-fade-in flex-col overflow-hidden rounded-xl border border-border bg-bg-card/95 shadow-2xl backdrop-blur-xl">
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <ProfileSwitcher profiles={profiles} activeProfileId={activeProfileId} onSelect={setActiveProfileId} />
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => void ipc.openSettings()}
-              className="rounded-md p-1.5 text-text-secondary hover:bg-bg-hover hover:text-text-primary"
-              title="Settings"
-            >
-              <Settings size={16} />
-            </button>
-            <button
-              onClick={() => void ipc.closePopup()}
-              className="rounded-md p-1.5 text-text-secondary hover:bg-bg-hover hover:text-text-primary"
-              title="Close"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-
-        <SearchBar ref={searchRef} value={query} onChange={setQuery} onKeyDown={handleSearchKeyDown} />
+    <div className="h-screen w-screen p-2.5">
+      <div className="flex h-full animate-float-in flex-col overflow-hidden rounded-float border border-stroke bg-card/90 shadow-elevation-3 backdrop-blur-xl">
+        <SearchBar
+          ref={searchRef}
+          value={query}
+          onChange={setQuery}
+          onKeyDown={handleSearchKeyDown}
+          trailing={
+            <ProfileSwitcher profiles={profiles} activeProfileId={activeProfileId} onSelect={setActiveProfileId} />
+          }
+        />
 
         <CategoryTabs activeCategory={category} availableCategories={availableCategories} onSelect={setCategory} />
 
-        <FieldList fields={filteredFields} selectedIndex={selectedIndex} onSelect={handleSelectField} />
+        <div className="border-t border-stroke-subtle" />
 
-        <div className="border-t border-border px-2 py-1.5">
-          <button
-            onClick={() => void ipc.openVaultManager()}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary"
-          >
-            <Plus size={16} />
-            Add new field
-          </button>
+        <div className="flex-1 overflow-hidden pt-1">
+          <FieldList
+            items={items}
+            selectedIndex={selectedIndex}
+            hasAnyFields={fields.length > 0}
+            onSelect={handleSelectField}
+            onHoverIndex={setSelectedIndex}
+            onOpenVault={() => void ipc.openVaultManager()}
+          />
+        </div>
+
+        <div className="flex items-center justify-between border-t border-stroke-subtle px-3 py-2">
+          <div className="flex items-center gap-2.5 text-caption text-ink-muted">
+            <span className="flex items-center gap-1">
+              <Kbd>↑</Kbd>
+              <Kbd>↓</Kbd>
+            </span>
+            <span className="flex items-center gap-1">
+              <Kbd>↵</Kbd> Copy
+            </span>
+            <span className="flex items-center gap-1">
+              <Kbd>Tab</Kbd> Category
+            </span>
+            <span className="flex items-center gap-1">
+              <Kbd>Esc</Kbd>
+            </span>
+          </div>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => void ipc.openVaultManager()}
+              tabIndex={-1}
+              className="flex items-center gap-1 rounded-control px-1.5 py-1 text-caption font-medium text-ink-secondary transition-colors hover:bg-hover hover:text-ink"
+            >
+              <PlusIcon className="h-3.5 w-3.5" /> Add field
+            </button>
+            <button
+              onClick={() => void ipc.openSettings()}
+              tabIndex={-1}
+              aria-label="Settings"
+              title="Settings"
+              className="rounded-control p-1 text-ink-secondary transition-colors hover:bg-hover hover:text-ink"
+            >
+              <Cog6ToothIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
