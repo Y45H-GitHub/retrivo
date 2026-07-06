@@ -3,19 +3,20 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../cn';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-1.5 rounded-md text-sm font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+  'inline-flex select-none items-center justify-center gap-1.5 rounded-control font-medium transition-colors disabled:pointer-events-none disabled:opacity-45',
   {
     variants: {
       variant: {
-        primary: 'bg-accent text-white hover:bg-accent-hover',
-        ghost: 'bg-transparent text-text-secondary hover:bg-bg-hover hover:text-text-primary',
-        outline: 'border border-border bg-transparent text-text-primary hover:bg-bg-hover',
-        danger: 'bg-transparent text-red-400 hover:bg-red-500/10'
+        primary: 'bg-accent text-accent-ink hover:bg-accent-hover active:bg-accent-hover',
+        secondary: 'border border-stroke bg-card text-ink shadow-elevation-1 hover:bg-hover active:bg-active',
+        ghost: 'text-ink-secondary hover:bg-hover hover:text-ink active:bg-active',
+        danger: 'text-danger hover:bg-danger/10 active:bg-danger/15'
       },
       size: {
-        sm: 'h-7 px-2.5',
-        md: 'h-9 px-4',
-        icon: 'h-8 w-8'
+        sm: 'h-7 px-2.5 text-label',
+        md: 'h-8 px-3.5 text-body',
+        icon: 'h-7 w-7',
+        'icon-md': 'h-8 w-8'
       }
     },
     defaultVariants: {
@@ -30,8 +31,8 @@ export interface ButtonProps
     VariantProps<typeof buttonVariants> {}
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => (
-    <button ref={ref} className={cn(buttonVariants({ variant, size }), className)} {...props} />
+  ({ className, variant, size, type = 'button', ...props }, ref) => (
+    <button ref={ref} type={type} className={cn(buttonVariants({ variant, size }), className)} {...props} />
   )
 );
 Button.displayName = 'Button';
