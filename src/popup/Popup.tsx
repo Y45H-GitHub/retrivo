@@ -123,12 +123,15 @@ export function Popup() {
     <div className="h-screen w-screen p-2.5">
       <div
         data-closing={copyState === 'closing' || undefined}
-        className="flex h-full flex-col overflow-hidden rounded-float border shadow-elevation-3 animate-float-in data-[closing]:animate-fade-out"
+        className="flex h-full flex-col overflow-hidden rounded-float border animate-float-in data-[closing]:animate-fade-out"
         style={{
           background: 'var(--fv-popup-bg)',
-          backdropFilter: 'blur(20px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-          borderColor: 'var(--fv-popup-border)'
+          borderColor: 'var(--fv-popup-border)',
+          // Electron can't blur real desktop content behind a transparent window (backdrop-filter
+          // only sees the page's own DOM, and native Acrylic needs Windows 11 22H2+), so the "glass"
+          // read comes from an opaque-enough tint + this edge highlight rather than a real blur.
+          boxShadow:
+            '0 16px 48px rgb(var(--fv-shadow) / 0.28), 0 6px 16px rgb(var(--fv-shadow) / 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.06)'
         }}
       >
         <SearchBar

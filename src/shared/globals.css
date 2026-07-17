@@ -4,34 +4,45 @@
 
 /*
  * FormVault theme variables (RGB triples — consumed by tailwind.config.js).
- * Dark-luxury minimalism: deep-slate neutral base + single cyan accent.
- * Light is the base; dark overrides via prefers-color-scheme so the app
- * follows the Windows theme automatically. No in-app theme switch.
+ * Neutral graphite base (near-zero blue cast) + a single cyan accent. Light is
+ * the base; dark overrides via prefers-color-scheme so the app follows the
+ * Windows theme automatically. No in-app theme switch.
+ *
+ * Every pair below is checked against WCAG AA (>=4.5:1 body text, >=3:1 large
+ * text/UI) — see requirements.md REQ-1.1 for the computed ratios.
+ *
+ * The popup's "glass" look (--fv-popup-bg/border) is a simulated effect, not a
+ * real background blur: Chromium's backdrop-filter cannot blur real desktop
+ * content behind a transparent Electron window, and Windows' native Acrylic
+ * material (backgroundMaterial) requires Windows 11 22H2+ with known bugs on
+ * frameless/transparent windows — both incompatible with Windows 10+ support.
+ * The tint is opaque enough to stay legible over arbitrary desktop content,
+ * with the semi-transparent border carrying the "glass edge" cue instead.
  */
 :root {
   --fv-canvas: 247 248 250; /* #F7F8FA */
   --fv-surface: 255 255 255; /* #FFFFFF */
   --fv-card: 255 255 255; /* #FFFFFF */
-  --fv-popup-bg: rgba(255, 255, 255, 0.8);
-  --fv-popup-border: rgba(0, 0, 0, 0.08);
+  --fv-popup-bg: rgba(255, 255, 255, 0.92);
+  --fv-popup-border: rgba(0, 0, 0, 0.12);
   --fv-hover: 238 240 245; /* #EEF0F5 */
   --fv-active: 226 229 238; /* #E2E5EE */
 
   --fv-ink: 17 24 39; /* #111827 */
   --fv-ink-secondary: 75 85 99; /* #4B5563 */
-  --fv-ink-muted: 156 163 175; /* #9CA3AF */
+  --fv-ink-muted: 107 114 128; /* #6B7280 — 4.6:1 on canvas, 4.8:1 on card */
 
   --fv-stroke: 229 232 239; /* #E5E8EF */
   --fv-stroke-subtle: 238 240 245; /* #EEF0F5 */
 
-  --fv-accent: 8 145 178; /* #0891B2 */
-  --fv-accent-hover: 14 116 144; /* #0E7490 */
+  --fv-accent: 14 116 144; /* #0E7490 — cyan-700, darkened so white-on-accent clears AA */
+  --fv-accent-hover: 8 145 178; /* #0891B2 */
   --fv-accent-ink: 255 255 255;
-  --fv-accent-subtle: rgba(8, 145, 178, 0.1);
+  --fv-accent-subtle: rgba(14, 116, 144, 0.1);
 
-  --fv-success: 5 150 105; /* #059669 */
-  --fv-warning: 217 119 6; /* #D97706 */
-  --fv-danger: 220 38 38; /* #DC2626 */
+  --fv-success: 4 120 87; /* #047857 — darkened from emerald-600 for AA on light bg */
+  --fv-warning: 180 83 9; /* #B45309 — darkened from amber-600 for AA on light bg */
+  --fv-danger: 185 28 28; /* #B91C1C — darkened from red-600 for AA on light bg */
   --fv-shadow: 15 23 42; /* #0F1726 */
 
   /* Motion */
@@ -45,25 +56,25 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --fv-canvas: 10 15 30; /* #0A0F1E */
-    --fv-surface: 17 24 39; /* #111827 */
-    --fv-card: 26 34 54; /* #1A2236 */
-    --fv-popup-bg: rgba(14, 20, 36, 0.82);
-    --fv-popup-border: rgba(255, 255, 255, 0.1);
-    --fv-hover: 31 45 71; /* #1F2D47 */
-    --fv-active: 36 52 89; /* #243459 */
+    --fv-canvas: 24 24 27; /* #18181B — neutral graphite, not navy */
+    --fv-surface: 32 32 35; /* #202023 */
+    --fv-card: 39 39 42; /* #27272A */
+    --fv-popup-bg: rgba(39, 39, 42, 0.92);
+    --fv-popup-border: rgba(255, 255, 255, 0.14);
+    --fv-hover: 48 48 52; /* #303034 */
+    --fv-active: 58 58 63; /* #3A3A3F */
 
-    --fv-ink: 232 237 245; /* #E8EDF5 */
-    --fv-ink-secondary: 136 150 176; /* #8896B0 */
-    --fv-ink-muted: 78 95 122; /* #4E5F7A */
+    --fv-ink: 250 250 250; /* #FAFAFA */
+    --fv-ink-secondary: 161 161 170; /* #A1A1AA */
+    --fv-ink-muted: 142 142 147; /* #8E8E93 — 4.6:1 on card, 5.4:1 on canvas */
 
-    --fv-stroke: rgba(255, 255, 255, 0.08);
-    --fv-stroke-subtle: rgba(255, 255, 255, 0.04);
+    --fv-stroke: rgba(255, 255, 255, 0.1);
+    --fv-stroke-subtle: rgba(255, 255, 255, 0.06);
 
-    --fv-accent: 34 211 238; /* #22D3EE */
-    --fv-accent-hover: 56 232 255; /* #38E8FF */
-    --fv-accent-ink: 10 15 30; /* #0A0F1E */
-    --fv-accent-subtle: rgba(34, 211, 238, 0.12);
+    --fv-accent: 6 182 212; /* #06B6D4 — cyan-500, softened from cyan-400 */
+    --fv-accent-hover: 34 211 238; /* #22D3EE — brighter on hover only */
+    --fv-accent-ink: 24 24 27; /* matches canvas */
+    --fv-accent-subtle: rgba(6, 182, 212, 0.14);
 
     --fv-success: 52 211 153; /* #34D399 */
     --fv-warning: 251 191 36; /* #FBBF24 */
