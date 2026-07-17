@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDownIcon, CheckIcon } from '@heroicons/react/20/solid';
+import { CaretDown, Check } from '@phosphor-icons/react';
 import { cn } from '../shared/cn';
 import type { Profile } from '../shared/types';
 
@@ -9,12 +9,12 @@ interface ProfileSwitcherProps {
   onSelect: (profileId: string) => void;
 }
 
-/** Compact chip + dropdown; lives inside the popup's search row. */
+/** Compact chip + dropdown; hidden entirely when only one profile exists (REQ-4.6). */
 export function ProfileSwitcher({ profiles, activeProfileId, onSelect }: ProfileSwitcherProps) {
   const [open, setOpen] = useState(false);
   const active = profiles.find((p) => p.id === activeProfileId) ?? profiles[0];
 
-  if (!active || profiles.length === 0) return null;
+  if (!active || profiles.length <= 1) return null;
 
   return (
     <div className="relative shrink-0">
@@ -23,11 +23,10 @@ export function ProfileSwitcher({ profiles, activeProfileId, onSelect }: Profile
         aria-haspopup="listbox"
         aria-expanded={open}
         tabIndex={-1}
-        className="flex items-center gap-1 rounded-full border border-stroke bg-surface py-[3px] pl-2 pr-1.5 text-label font-medium text-ink-secondary transition-colors hover:bg-hover hover:text-ink"
+        className="flex items-center gap-1 rounded-pill border border-stroke bg-surface py-[3px] pl-2.5 pr-1.5 text-label font-medium text-ink-secondary transition-colors duration-fast hover:bg-hover hover:text-ink"
       >
-        <span aria-hidden>{active.icon}</span>
         <span className="max-w-[80px] truncate">{active.name}</span>
-        <ChevronDownIcon className="h-3.5 w-3.5 text-ink-muted" />
+        <CaretDown weight="regular" className="h-3.5 w-3.5 text-ink-muted" />
       </button>
 
       {open && (
@@ -47,13 +46,12 @@ export function ProfileSwitcher({ profiles, activeProfileId, onSelect }: Profile
                   setOpen(false);
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-body transition-colors hover:bg-hover',
+                  'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-body transition-colors duration-fast hover:bg-hover',
                   profile.id === active.id ? 'text-ink' : 'text-ink-secondary'
                 )}
               >
-                <span aria-hidden>{profile.icon}</span>
                 <span className="flex-1 truncate">{profile.name}</span>
-                {profile.id === active.id && <CheckIcon className="h-3.5 w-3.5 text-accent" />}
+                {profile.id === active.id && <Check weight="bold" className="h-3.5 w-3.5 text-accent" />}
               </button>
             ))}
           </div>

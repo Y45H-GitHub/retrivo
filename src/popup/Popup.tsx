@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PlusIcon, Cog6ToothIcon } from '@heroicons/react/20/solid';
+import { Plus, Gear } from '@phosphor-icons/react';
 import { ipc } from '../shared/ipc-client';
 import { CATEGORIES } from '../shared/constants';
 import { Kbd } from '../shared/ui/Kbd';
 import { CategoryTabs } from './CategoryTabs';
-import { FieldList, type ListedField } from './FieldList';
+import { CopyFeedbackController, type CopyFeedbackState } from './copyFeedbackController';
+import { FieldList } from './FieldList';
+import { computeAvailableCategories, computePopupItems } from './popupUtils';
 import { ProfileSwitcher } from './ProfileSwitcher';
 import { SearchBar } from './SearchBar';
 import type { Category, Field, Profile } from '../shared/types';
-
-const CATEGORY_LABELS = new Map(CATEGORIES.map((c) => [c.id, c.label]));
 
 export function Popup() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -18,8 +18,17 @@ export function Popup() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<Category | 'all'>('all');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [copyState, setCopyState] = useState<CopyFeedbackState>('idle');
+  const [copiedFieldId, setCopiedFieldId] = useState<string | null>(null);
+  const [autoPaste, setAutoPaste] = useState(false);
 
   const searchRef = useRef<HTMLInputElement>(null);
+  const copyControllerRef = useRef(
+    new CopyFeedbackController({
+      onStateChange: (s) => setCopyState(s),
+      onClose: () => void ipc.closePopup()
+    })
+  );
 
   const loadProfiles = useCallback(async () => {
     const [fetchedProfiles, settings] = await Promise.all([ipc.getProfiles(), ipc.getSettings()]);
@@ -35,6 +44,7 @@ export function Popup() {
 
   useEffect(() => {
     void loadProfiles();
+    void ipc.getCapabilities().then((c) => setAutoPaste(c.autoPaste));
   }, [loadProfiles]);
 
   useEffect(() => {
@@ -46,6 +56,9 @@ export function Popup() {
       setQuery('');
       setCategory('all');
       setSelectedIndex(0);
+      copyControllerRef.current.reset();
+      setCopyState('idle');
+      setCopiedFieldId(null);
       void loadProfiles();
       searchRef.current?.focus();
     });
@@ -60,41 +73,33 @@ export function Popup() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const availableCategories = useMemo(() => new Set(fields.map((f) => f.category)), [fields]);
+  useEffect(() => {
+    const controller = copyControllerRef.current;
+    return () => controller.dispose();
+  }, []);
 
-  const items = useMemo<ListedField[]>(() => {
-    const q = query.trim().toLowerCase();
-    const filtered = fields
-      .filter((f) => category === 'all' || f.category === category)
-      .filter((f) => {
-        if (!q) return true;
-        return (
-          f.label.toLowerCase().includes(q) ||
-          f.value.toLowerCase().includes(q) ||
-          (f.shortcut ?? '').toLowerCase().includes(q)
-        );
-      });
+  const availableCategories = useMemo(() => computeAvailableCategories(fields), [fields]);
+  const hasAnyValuedFields = useMemo(() => fields.some((f) => f.value !== ''), [fields]);
 
-    // In the "All" view, group rows under compact category headers.
-    let lastCategory: Category | null = null;
-    return filtered.map((field) => {
-      const showHeader = category === 'all' && field.category !== lastCategory;
-      lastCategory = field.category;
-      return showHeader ? { field, groupLabel: CATEGORY_LABELS.get(field.category) } : { field };
-    });
-  }, [fields, category, query]);
+  const items = useMemo(() => computePopupItems(fields, category, query), [fields, category, query]);
 
   useEffect(() => {
     setSelectedIndex(0);
   }, [query, category]);
 
   async function handleSelectField(field: Field) {
+    if (!copyControllerRef.current.start()) return;
+    setCopiedFieldId(field.id);
     await ipc.copyField(field.id, true);
-    setTimeout(() => void ipc.closePopup(), 500);
   }
 
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Escape') {
+      if (copyControllerRef.current.escape()) return;
+      if (query) {
+        setQuery('');
+        return;
+      }
       void ipc.closePopup();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -109,24 +114,29 @@ export function Popup() {
       e.preventDefault();
       const tabs: (Category | 'all')[] = ['all', ...CATEGORIES.filter((c) => availableCategories.has(c.id)).map((c) => c.id)];
       const currentIndex = tabs.indexOf(category);
-      const nextIndex = e.shiftKey
-        ? (currentIndex - 1 + tabs.length) % tabs.length
-        : (currentIndex + 1) % tabs.length;
+      const nextIndex = e.shiftKey ? (currentIndex - 1 + tabs.length) % tabs.length : (currentIndex + 1) % tabs.length;
       setCategory(tabs[nextIndex]);
     }
   }
 
   return (
     <div className="h-screen w-screen p-2.5">
-      <div className="flex h-full animate-float-in flex-col overflow-hidden rounded-float border border-stroke bg-card/90 shadow-elevation-3 backdrop-blur-xl">
+      <div
+        data-closing={copyState === 'closing' || undefined}
+        className="flex h-full flex-col overflow-hidden rounded-float border shadow-elevation-3 animate-float-in data-[closing]:animate-fade-out"
+        style={{
+          background: 'var(--fv-popup-bg)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          borderColor: 'var(--fv-popup-border)'
+        }}
+      >
         <SearchBar
           ref={searchRef}
           value={query}
           onChange={setQuery}
           onKeyDown={handleSearchKeyDown}
-          trailing={
-            <ProfileSwitcher profiles={profiles} activeProfileId={activeProfileId} onSelect={setActiveProfileId} />
-          }
+          trailing={<ProfileSwitcher profiles={profiles} activeProfileId={activeProfileId} onSelect={setActiveProfileId} />}
         />
 
         <CategoryTabs activeCategory={category} availableCategories={availableCategories} onSelect={setCategory} />
@@ -137,48 +147,52 @@ export function Popup() {
           <FieldList
             items={items}
             selectedIndex={selectedIndex}
-            hasAnyFields={fields.length > 0}
-            onSelect={handleSelectField}
+            hasAnyFields={hasAnyValuedFields}
+            copiedFieldId={copyState !== 'idle' ? copiedFieldId : null}
+            pasteLabel={autoPaste}
+            onSelect={(field) => void handleSelectField(field)}
             onHoverIndex={setSelectedIndex}
             onOpenVault={() => void ipc.openVaultManager()}
           />
         </div>
 
-        <div className="flex items-center justify-between border-t border-stroke-subtle px-3 py-2">
-          <div className="flex items-center gap-2.5 text-caption text-ink-muted">
-            <span className="flex items-center gap-1">
-              <Kbd>↑</Kbd>
-              <Kbd>↓</Kbd>
-            </span>
-            <span className="flex items-center gap-1">
-              <Kbd>↵</Kbd> Copy
-            </span>
-            <span className="flex items-center gap-1">
-              <Kbd>Tab</Kbd> Category
-            </span>
-            <span className="flex items-center gap-1">
-              <Kbd>Esc</Kbd>
-            </span>
+        {fields.length > 0 && (
+          <div className="flex items-center justify-between border-t border-stroke-subtle px-3 py-2">
+            <div className="flex items-center gap-2.5 text-caption text-ink-muted">
+              <span className="flex items-center gap-1">
+                <Kbd>↑</Kbd>
+                <Kbd>↓</Kbd>
+              </span>
+              <span className="flex items-center gap-1">
+                <Kbd>↵</Kbd> {autoPaste ? 'Paste' : 'Copy'}
+              </span>
+              <span className="flex items-center gap-1">
+                <Kbd>Tab</Kbd> Category
+              </span>
+              <span className="flex items-center gap-1">
+                <Kbd>Esc</Kbd>
+              </span>
+            </div>
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={() => void ipc.openVaultManager()}
+                tabIndex={-1}
+                className="flex items-center gap-1 rounded-control px-1.5 py-1 text-caption font-medium text-ink-secondary transition-colors duration-fast hover:bg-hover hover:text-ink"
+              >
+                <Plus weight="regular" className="h-3.5 w-3.5" /> Add field
+              </button>
+              <button
+                onClick={() => void ipc.openSettings()}
+                tabIndex={-1}
+                aria-label="Settings"
+                title="Settings"
+                className="rounded-control p-1 text-ink-secondary transition-colors duration-fast hover:bg-hover hover:text-ink"
+              >
+                <Gear weight="regular" className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={() => void ipc.openVaultManager()}
-              tabIndex={-1}
-              className="flex items-center gap-1 rounded-control px-1.5 py-1 text-caption font-medium text-ink-secondary transition-colors hover:bg-hover hover:text-ink"
-            >
-              <PlusIcon className="h-3.5 w-3.5" /> Add field
-            </button>
-            <button
-              onClick={() => void ipc.openSettings()}
-              tabIndex={-1}
-              aria-label="Settings"
-              title="Settings"
-              className="rounded-control p-1 text-ink-secondary transition-colors hover:bg-hover hover:text-ink"
-            >
-              <Cog6ToothIcon className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
