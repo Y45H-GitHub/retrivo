@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { DocumentIcon, PlusIcon, TrashIcon } from '@heroicons/react/20/solid';
-import { FolderOpenIcon } from '@heroicons/react/24/outline';
+import { File, FolderOpen, Plus } from '@phosphor-icons/react';
 import { Button } from '../shared/ui/Button';
 import { Input } from '../shared/ui/Input';
 import { EmptyState } from '../shared/ui/EmptyState';
+import { Collapsible } from '../shared/ui/Collapsible';
+import { InlineConfirm } from '../shared/ui/InlineConfirm';
 import { ipc } from '../shared/ipc-client';
 import type { FileRef } from '../shared/types';
 
@@ -39,11 +40,19 @@ export function FileVault({ profileId, files, onChanged }: FileVaultProps) {
   }
 
   return (
-    <section className="mt-6">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-caption font-semibold uppercase tracking-wide text-ink-muted">Files</h3>
+    <Collapsible
+      className="mt-6"
+      trigger={
+        <div className="flex items-center gap-2">
+          <FolderOpen weight="regular" className="h-4 w-4 text-ink-muted" />
+          <h3 className="text-caption font-semibold uppercase tracking-wide text-ink-muted">Files</h3>
+          <span className="ml-1 rounded-full bg-hover px-1.5 py-0.5 text-caption text-ink-muted">{files.length}</span>
+        </div>
+      }
+    >
+      <div className="mb-2 flex justify-end">
         <Button variant="ghost" size="sm" onClick={handlePick}>
-          <PlusIcon className="h-3.5 w-3.5" /> Add file
+          <Plus weight="regular" className="h-3.5 w-3.5" /> Add file
         </Button>
       </div>
 
@@ -68,7 +77,7 @@ export function FileVault({ profileId, files, onChanged }: FileVaultProps) {
       {files.length === 0 && !pendingPath ? (
         <div className="rounded-card border border-dashed border-stroke">
           <EmptyState
-            icon={FolderOpenIcon}
+            icon={FolderOpen}
             title="No files yet"
             description="Keep shortcuts to documents you upload often — photos, ID scans, signatures."
           />
@@ -80,25 +89,21 @@ export function FileVault({ profileId, files, onChanged }: FileVaultProps) {
               <div
                 key={file.id}
                 className={
-                  'group flex items-center gap-2.5 px-3 py-2 transition-colors hover:bg-hover' +
+                  'group flex items-center gap-2.5 px-3 py-2 transition-colors duration-fast hover:bg-hover' +
                   (i < files.length - 1 ? ' border-b border-stroke-subtle' : '')
                 }
               >
-                <DocumentIcon className="h-4 w-4 shrink-0 text-ink-muted" />
+                <File weight="regular" className="h-4 w-4 shrink-0 text-ink-muted" />
                 <span className="min-w-0 flex-1 truncate text-body font-medium text-ink">{file.label}</span>
                 <span className="max-w-[45%] truncate font-mono text-caption text-ink-muted">{file.filePath}</span>
-                <button
-                  onClick={() => void handleDelete(file.id)}
-                  aria-label={`Remove ${file.label}`}
-                  className="hidden rounded p-1 text-ink-muted transition-colors hover:bg-danger/10 hover:text-danger group-hover:block"
-                >
-                  <TrashIcon className="h-3.5 w-3.5" />
-                </button>
+                <div className="opacity-0 transition-opacity duration-fast group-hover:opacity-100 group-focus-within:opacity-100">
+                  <InlineConfirm triggerAriaLabel={`Remove ${file.label}`} onConfirm={() => void handleDelete(file.id)} />
+                </div>
               </div>
             ))}
           </div>
         )
       )}
-    </section>
+    </Collapsible>
   );
 }

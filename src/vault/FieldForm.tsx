@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Button } from '../shared/ui/Button';
 import { Dialog } from '../shared/ui/Dialog';
 import { Input, Select, Textarea, FieldLabel } from '../shared/ui/Input';
-import { CATEGORIES } from '../shared/constants';
+import { IconPicker } from '../shared/ui/IconPicker';
+import { CATEGORIES, DEFAULT_FIELD_ICON } from '../shared/constants';
 import type { Category, Field, FieldType, NewField, UpdateField } from '../shared/types';
 
 interface FieldFormProps {
@@ -26,7 +27,7 @@ export function FieldForm({ profileId, field, onClose, onSave }: FieldFormProps)
   const [category, setCategory] = useState<Category>(field?.category ?? 'personal');
   const [fieldType, setFieldType] = useState<FieldType>(field?.fieldType ?? 'text');
   const [shortcut, setShortcut] = useState(field?.shortcut ?? '');
-  const [icon, setIcon] = useState(field?.icon ?? '📋');
+  const [icon, setIcon] = useState(field?.icon ?? DEFAULT_FIELD_ICON);
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -52,9 +53,9 @@ export function FieldForm({ profileId, field, onClose, onSave }: FieldFormProps)
     <Dialog title={field ? 'Edit field' : 'Add field'} onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
         <div className="flex gap-3">
-          <div className="w-14">
+          <div>
             <FieldLabel>Icon</FieldLabel>
-            <Input value={icon} onChange={(e) => setIcon(e.target.value)} maxLength={4} className="text-center" aria-label="Icon" />
+            <IconPicker value={icon} onChange={setIcon} />
           </div>
           <div className="flex-1">
             <FieldLabel>Label</FieldLabel>

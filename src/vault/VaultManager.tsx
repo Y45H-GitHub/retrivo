@@ -1,38 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  PlusIcon,
-  PencilSquareIcon,
-  TrashIcon,
-  EyeIcon,
-  EyeSlashIcon,
-  DocumentDuplicateIcon,
-  CheckIcon,
-  MagnifyingGlassIcon
-} from '@heroicons/react/20/solid';
-import { ArchiveBoxIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlass, Plus, Lock } from '@phosphor-icons/react';
 import { ipc } from '../shared/ipc-client';
-import { CATEGORIES, CATEGORY_COLORS } from '../shared/constants';
-import { isSensitiveField, maskValue } from '../shared/mask';
-import { cn } from '../shared/cn';
+import { CATEGORIES } from '../shared/constants';
 import { Button } from '../shared/ui/Button';
 import { Input } from '../shared/ui/Input';
-import { Kbd } from '../shared/ui/Kbd';
 import { EmptyState } from '../shared/ui/EmptyState';
+import { useToast } from '../shared/ui/useToast';
+import { applyReorder } from './reorderUtils';
+import { CategorySection } from './CategorySection';
 import { ProfileManager } from './ProfileManager';
 import { FieldForm } from './FieldForm';
 import { FileVault } from './FileVault';
 import type { Field, FileRef, NewField, Profile, UpdateField } from '../shared/types';
 
 export function VaultManager() {
+  const { toast } = useToast();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [fields, setFields] = useState<Field[]>([]);
+  const [profileFields, setProfileFields] = useState<Record<string, Field[]>>({});
   const [files, setFiles] = useState<FileRef[]>([]);
   const [filter, setFilter] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [highlightedFieldId, setHighlightedFieldId] = useState<string | null>(null);
 
   const loadProfiles = useCallback(async () => {
     const fetched = await ipc.getProfiles();
@@ -46,9 +39,18 @@ export function VaultManager() {
     setFiles(fetchedFiles);
   }, []);
 
+  const loadAllProfileFields = useCallback(async (profileList: Profile[]) => {
+    const entries = await Promise.all(profileList.map(async (p) => [p.id, await ipc.getAllFields(p.id)] as const));
+    setProfileFields(Object.fromEntries(entries));
+  }, []);
+
   useEffect(() => {
     void loadProfiles();
   }, [loadProfiles]);
+
+  useEffect(() => {
+    if (profiles.length > 0) void loadAllProfileFields(profiles);
+  }, [profiles, loadAllProfileFields]);
 
   useEffect(() => {
     if (activeProfileId) void loadProfileData(activeProfileId);
@@ -67,10 +69,7 @@ export function VaultManager() {
     const q = filter.trim().toLowerCase();
     if (!q) return fields;
     return fields.filter(
-      (f) =>
-        f.label.toLowerCase().includes(q) ||
-        f.value.toLowerCase().includes(q) ||
-        (f.shortcut ?? '').toLowerCase().includes(q)
+      (f) => f.label.toLowerCase().includes(q) || f.value.toLowerCase().includes(q) || (f.shortcut ?? '').toLowerCase().includes(q)
     );
   }, [fields, filter]);
 
@@ -81,37 +80,71 @@ export function VaultManager() {
       list.push(field);
       map.set(field.category, list);
     }
+    for (const list of map.values()) list.sort((a, b) => a.sortOrder - b.sortOrder);
     return map;
   }, [filteredFields]);
 
+  const isOnboarding = fields.length > 0 && fields.every((f) => f.value === '') && !filter;
+
   async function handleAddProfile(name: string) {
-    const created = await ipc.addProfile({ name });
-    setActiveProfileId(created.id);
+    try {
+      const created = await ipc.addProfile({ name });
+      setActiveProfileId(created.id);
+    } catch {
+      toast('error', 'Failed to create profile. Please try again.');
+    }
   }
 
   async function handleDeleteProfile(profileId: string) {
-    if (!confirm('Delete this profile and all its fields? This cannot be undone.')) return;
-    await ipc.deleteProfile(profileId);
-    if (activeProfileId === profileId) setActiveProfileId(null);
+    try {
+      await ipc.deleteProfile(profileId);
+      if (activeProfileId === profileId) setActiveProfileId(null);
+    } catch {
+      toast('error', 'Failed to delete profile. Please try again.');
+    }
   }
 
   async function handleSaveField(field: NewField | UpdateField) {
-    if ('id' in field) {
-      await ipc.updateField(field);
-    } else {
-      await ipc.addField(field);
+    try {
+      if ('id' in field) {
+        await ipc.updateField(field);
+      } else {
+        await ipc.addField(field);
+      }
+    } catch {
+      toast('error', 'Failed to save field. Please try again.');
     }
   }
 
   async function handleDeleteField(fieldId: string) {
-    if (!confirm('Delete this field? This cannot be undone.')) return;
-    await ipc.deleteField(fieldId);
+    try {
+      await ipc.deleteField(fieldId);
+    } catch {
+      toast('error', 'Failed to delete field. Please try again.');
+    }
   }
 
   async function handleCopyField(fieldId: string) {
     await ipc.copyField(fieldId, false);
     setCopiedId(fieldId);
     setTimeout(() => setCopiedId((id) => (id === fieldId ? null : id)), 1200);
+  }
+
+  async function handleReorder(categoryFields: Field[], orderedIds: string[]) {
+    const reordered = applyReorder(categoryFields, orderedIds);
+    const changed = reordered.filter((field, i) => field.sortOrder !== categoryFields[i]?.sortOrder || field.id !== categoryFields[i]?.id);
+
+    setFields((prev) => {
+      const byId = new Map(reordered.map((f) => [f.id, f]));
+      return prev.map((f) => byId.get(f.id) ?? f);
+    });
+
+    try {
+      await Promise.all(changed.map((field) => ipc.updateField({ id: field.id, sortOrder: field.sortOrder })));
+    } catch {
+      toast('error', 'Failed to save the new order. Reloading…');
+      if (activeProfileId) await loadProfileData(activeProfileId);
+    }
   }
 
   function toggleReveal(fieldId: string) {
@@ -123,6 +156,15 @@ export function VaultManager() {
     });
   }
 
+  function handleStartFillingIn() {
+    const firstEmpty = [...fields].sort((a, b) => a.sortOrder - b.sortOrder).find((f) => f.value === '');
+    if (!firstEmpty) return;
+    const row = document.querySelector<HTMLElement>(`[data-field-id="${firstEmpty.id}"]`);
+    row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setHighlightedFieldId(firstEmpty.id);
+    setTimeout(() => setHighlightedFieldId((id) => (id === firstEmpty.id ? null : id)), 1500);
+  }
+
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
 
   return (
@@ -130,6 +172,7 @@ export function VaultManager() {
       <ProfileManager
         profiles={profiles}
         activeProfileId={activeProfileId}
+        profileFields={profileFields}
         onSelect={setActiveProfileId}
         onAdd={handleAddProfile}
         onDelete={handleDeleteProfile}
@@ -138,16 +181,13 @@ export function VaultManager() {
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 border-b border-stroke-subtle bg-canvas px-6 py-3.5">
           <div className="min-w-0 flex-1">
-            <h1 className="truncate font-display text-display text-ink">
-              {activeProfile ? activeProfile.name : 'Vault'}
-            </h1>
+            <h1 className="truncate font-display text-display text-ink">{activeProfile ? activeProfile.name : 'Vault'}</h1>
             <p className="text-label text-ink-muted">
-              {fields.length} {fields.length === 1 ? 'field' : 'fields'} · {files.length}{' '}
-              {files.length === 1 ? 'file' : 'files'}
+              {fields.length} {fields.length === 1 ? 'field' : 'fields'} · {files.length} {files.length === 1 ? 'file' : 'files'}
             </p>
           </div>
           <div className="relative w-52">
-            <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+            <MagnifyingGlass weight="regular" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
             <Input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
@@ -163,16 +203,29 @@ export function VaultManager() {
             }}
             disabled={!activeProfileId}
           >
-            <PlusIcon className="h-4 w-4" /> Add field
+            <Plus weight="regular" className="h-4 w-4" /> Add field
           </Button>
         </header>
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          {filteredFields.length === 0 ? (
+          {isOnboarding ? (
+            <div className="rounded-card border border-dashed border-stroke">
+              <EmptyState
+                icon={Lock}
+                title="Your vault is ready — fill it in"
+                description="Add your details to the fields below. Once filled, press your hotkey anywhere to paste them instantly."
+                action={
+                  <Button size="sm" onClick={handleStartFillingIn}>
+                    Start filling in fields
+                  </Button>
+                }
+              />
+            </div>
+          ) : filteredFields.length === 0 ? (
             <div className="rounded-card border border-dashed border-stroke">
               {fields.length === 0 ? (
                 <EmptyState
-                  icon={ArchiveBoxIcon}
+                  icon={Lock}
                   title="No fields in this profile"
                   description="Add your first field — a name, PAN, bank account — and paste it anywhere with one shortcut."
                   action={
@@ -183,12 +236,12 @@ export function VaultManager() {
                         setFormOpen(true);
                       }}
                     >
-                      <PlusIcon className="h-3.5 w-3.5" /> Add field
+                      <Plus weight="regular" className="h-3.5 w-3.5" /> Add field
                     </Button>
                   }
                 />
               ) : (
-                <EmptyState icon={MagnifyingGlassIcon} title="No matches" description="Try a different filter." />
+                <EmptyState icon={MagnifyingGlass} title="No matches" description="Try a different filter." />
               )}
             </div>
           ) : (
@@ -196,120 +249,35 @@ export function VaultManager() {
               const list = fieldsByCategory.get(cat.id);
               if (!list || list.length === 0) return null;
               return (
-                <section key={cat.id} className="mb-5">
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat.id] }} />
-                    <h3 className="text-caption font-semibold uppercase tracking-wide text-ink-muted">{cat.label}</h3>
-                    <span className="text-caption text-ink-muted">{list.length}</span>
-                  </div>
-
-                  <div className="overflow-hidden rounded-card border border-stroke bg-card shadow-elevation-1">
-                    {list.map((field, i) => {
-                      const sensitive = isSensitiveField(field.shortcut);
-                      const shown = revealed.has(field.id) || !sensitive;
-                      const hasValue = field.value.length > 0;
-                      const displayValue = hasValue ? (shown ? field.value : maskValue(field.value)) : '—';
-                      return (
-                        <div
-                          key={field.id}
-                          className={cn(
-                            'group flex items-center gap-3 px-3 py-2 transition-colors hover:bg-hover',
-                            i < list.length - 1 && 'border-b border-stroke-subtle'
-                          )}
-                        >
-                          <span
-                            aria-hidden
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-hover text-[15px] leading-none"
-                          >
-                            {field.icon}
-                          </span>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="truncate text-body font-medium text-ink">{field.label}</span>
-                              {field.shortcut && <Kbd>{field.shortcut}</Kbd>}
-                            </div>
-                            <span
-                              className={cn(
-                                'block truncate text-label',
-                                hasValue ? 'font-mono text-ink-secondary' : 'italic text-ink-muted'
-                              )}
-                            >
-                              {displayValue}
-                            </span>
-                          </div>
-
-                          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                            {sensitive && hasValue && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label={shown ? 'Hide value' : 'Reveal value'}
-                                title={shown ? 'Hide value' : 'Reveal value'}
-                                onClick={() => toggleReveal(field.id)}
-                              >
-                                {shown ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
-                              </Button>
-                            )}
-                            {hasValue && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Copy value"
-                                title="Copy value"
-                                onClick={() => void handleCopyField(field.id)}
-                              >
-                                {copiedId === field.id ? (
-                                  <CheckIcon className="h-4 w-4 text-success" />
-                                ) : (
-                                  <DocumentDuplicateIcon className="h-4 w-4" />
-                                )}
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label="Edit field"
-                              title="Edit field"
-                              onClick={() => {
-                                setEditingField(field);
-                                setFormOpen(true);
-                              }}
-                            >
-                              <PencilSquareIcon className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="danger"
-                              size="icon"
-                              aria-label="Delete field"
-                              title="Delete field"
-                              onClick={() => void handleDeleteField(field.id)}
-                            >
-                              <TrashIcon className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
+                <CategorySection
+                  key={cat.id}
+                  category={cat.id}
+                  label={cat.label}
+                  fields={list}
+                  revealed={revealed}
+                  copiedId={copiedId}
+                  highlightedFieldId={highlightedFieldId}
+                  onReorder={(orderedIds) => void handleReorder(list, orderedIds)}
+                  onToggleReveal={toggleReveal}
+                  onCopy={(fieldId) => void handleCopyField(fieldId)}
+                  onEdit={(field) => {
+                    setEditingField(field);
+                    setFormOpen(true);
+                  }}
+                  onDelete={(fieldId) => void handleDeleteField(fieldId)}
+                />
               );
             })
           )}
 
-          {activeProfileId && (
+          {activeProfileId && !isOnboarding && (
             <FileVault profileId={activeProfileId} files={files} onChanged={() => loadProfileData(activeProfileId)} />
           )}
         </div>
       </main>
 
       {formOpen && activeProfileId && (
-        <FieldForm
-          profileId={activeProfileId}
-          field={editingField}
-          onClose={() => setFormOpen(false)}
-          onSave={handleSaveField}
-        />
+        <FieldForm profileId={activeProfileId} field={editingField} onClose={() => setFormOpen(false)} onSave={handleSaveField} />
       )}
     </div>
   );
