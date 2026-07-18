@@ -46,3 +46,8 @@ desktop.ini
 # Temp
 .temp/
 .cache/
+
+# Personal working notes / AI-assistant scratch — not part of the shipped product
+.ignore/
+.agents/
+.config.kiro

@@ -11,8 +11,12 @@ directories:
 # plus the latest.yml feed file electron-updater reads.
 publish:
   provider: github
-  owner: YOUR_GITHUB_USERNAME
-  repo: YOUR_REPO_NAME
+  owner: Y45H-GitHub
+  repo: form-vault
+  # electron-builder defaults to publishing as a draft, which stays invisible to users and to
+  # auto-update until someone manually clicks "Publish release" on GitHub. v0.1.0 needed that
+  # manual step; this makes every future `--publish always` go live immediately.
+  releaseType: release
 
 # better-sqlite3 ships prebuilt binaries that already match Electron's ABI via
 # postinstall (electron-builder install-app-deps). uiohook-napi/robotjs need

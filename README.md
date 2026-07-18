@@ -4,6 +4,8 @@
 
 A lightweight desktop productivity app that lives in the system tray. Press a global hotkey → a floating popup appears → pick your data → it's pasted instantly. Works anywhere on your PC: browsers, PDF readers, Excel, government portals.
 
+**Download:** [latest release](https://github.com/Y45H-GitHub/form-vault/releases/latest) (Windows 10+, `FormVault-Setup-<version>.exe`)
+
 ## Tech Stack
 
 - **Desktop:** Electron + electron-vite
@@ -11,7 +13,52 @@ A lightweight desktop productivity app that lives in the system tray. Press a gl
 - **Styling:** Tailwind CSS + a small custom CVA-based component library (no shadcn/ui)
 - **Database:** SQLite (better-sqlite3) — local only, never synced
 - **Encryption:** Electron `safeStorage` (OS-backed — DPAPI on Windows), per-machine key
-- **Packaging:** electron-builder
+- **Packaging:** electron-builder, auto-update via electron-updater + GitHub Releases
+
+## Project Structure
+
+```
+electron/              Main process (Node context) — one file per concern
+  main.ts                 App entry: single-instance lock, tray, hotkey, first-run detection
+  database.ts              SQLite schema + all queries (profiles, fields, files, settings)
+  encryption.ts             Field values at rest — safeStorage, with legacy-format fallback
+  exportCrypto.ts           Passphrase-based encryption for vault export/import files
+  validateImport.ts         Shape-validates a decrypted import before it touches the database
+  ipc-handlers.ts           Every ipcMain.handle(...) the renderer can call
+  preload.ts                contextBridge surface exposed to the renderer as window.formvault
+  tray.ts / hotkey.ts       Tray icon + context menu / global shortcut registration
+  popup-window.ts           Popup window (frameless, transparent, always-on-top)
+  vault-window.ts            Vault Manager window
+  settings-window.ts          Settings window
+  clipboard.ts              Copy + simulated-paste (robotjs, falls back to uiohook-napi)
+  text-expander.ts          Global keyboard hook for "!shortcut" text expansion
+  csp.ts                    Content-Security-Policy, packaged builds only
+  autoUpdate.ts             electron-updater wiring — checks GitHub Releases
+
+src/
+  popup/                  Popup window UI (the hotkey → search → copy surface)
+  vault/                  Vault Manager UI (profiles, fields, drag-to-reorder, templates)
+  settings/               Settings window UI
+  shared/                 Code used by more than one window
+    types.ts                 Shared TS types (Field, Profile, etc.) — mirrors the SQLite schema
+    constants.ts              IPC channel names, categories, hotkey default
+    fieldTemplates.ts         Starter field sets shown in the Vault Manager's template picker
+    ipc-client.ts             Thin re-export of window.formvault for renderer code
+    globals.css               Design tokens (CSS custom properties) + Tailwind base
+    ui/                       Shared component library (Button, Dialog, Toast, etc.)
+
+.kiro/specs/formvault-ui-redesign/
+  requirements.md         The UI/UX redesign spec — design tokens, component contracts, WCAG
+                          ratios, and the reasoning behind decisions that aren't obvious from
+                          the code (e.g. why the popup can't have a real background blur).
+  design.md               Implementation-level companion to requirements.md.
+
+assets/                 App icons (tray + installer)
+electron-builder.yml    Packaging + publish (GitHub Releases) config
+```
+
+Tests live next to the code they cover (`*.test.ts`/`*.test.tsx`), not in a
+separate `__tests__` tree — `npm run test` picks them all up via Vitest.
 
 ## Getting Started
 
@@ -65,20 +112,19 @@ installer.
 ### Releasing / auto-update
 
 The app checks for updates on startup and every 4 hours
-(`electron/autoUpdate.ts`, via `electron-updater`) — but only in packaged
-builds, and only once `electron-builder.yml`'s `publish.owner`/`publish.repo`
-point at a real GitHub repository (they're placeholders today). To ship a
-release:
+(`electron/autoUpdate.ts`, via `electron-updater`), in packaged builds only,
+against [github.com/Y45H-GitHub/form-vault/releases](https://github.com/Y45H-GitHub/form-vault/releases).
+To ship a release:
 
-1. Fill in `publish.owner`/`publish.repo` in `electron-builder.yml`.
-2. Set a `GH_TOKEN` env var (a GitHub personal access token with `repo`
-   scope) so electron-builder can upload to Releases.
-3. Bump `version` in `package.json`.
-4. Run `npx electron-builder --publish always` (instead of plain
-   `npm run build`) — this uploads the installer and the `latest.yml` feed
-   file that `electron-updater` reads to detect new versions.
+1. Bump `version` in `package.json`.
+2. Set a `GH_TOKEN` env var — a GitHub personal access token (fine-grained,
+   scoped to this repo, **Contents: Read and write** permission is enough).
+3. Run `npm run build -- --publish always`. This uploads the installer and
+   the `latest.yml` feed file `electron-updater` reads, and — since
+   `electron-builder.yml` sets `releaseType: release` — publishes it live
+   immediately rather than as a draft.
 
-Until this is configured, the app runs fine — `checkForUpdatesAndNotify()`
+Until a release exists, the app runs fine — `checkForUpdatesAndNotify()`
 just finds nothing and silently no-ops.
 
 ### A note on the Electron version
