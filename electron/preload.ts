@@ -18,8 +18,14 @@ const api = {
     ipcRenderer.invoke(IPC.ADD_FILE, profileId, label, filePath),
   deleteFile: (fileId: string): Promise<void> => ipcRenderer.invoke(IPC.DELETE_FILE, fileId),
   pickFile: (): Promise<string | null> => ipcRenderer.invoke(IPC.PICK_FILE),
-  exportVault: (): Promise<{ ok: boolean; path?: string }> => ipcRenderer.invoke(IPC.EXPORT_VAULT),
-  importVault: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.IMPORT_VAULT),
+  exportVault: (
+    passphrase: string
+  ): Promise<{ ok: boolean; path?: string; reason?: 'no-passphrase' | 'cancelled' }> =>
+    ipcRenderer.invoke(IPC.EXPORT_VAULT, passphrase),
+  importVault: (
+    passphrase: string
+  ): Promise<{ ok: boolean; reason?: 'no-passphrase' | 'cancelled' | 'wrong-passphrase' | 'invalid-file' }> =>
+    ipcRenderer.invoke(IPC.IMPORT_VAULT, passphrase),
 
   getSettings: (): Promise<Record<string, unknown>> => ipcRenderer.invoke(IPC.SETTINGS_GET),
   setSetting: (key: string, value: unknown): Promise<void> => ipcRenderer.invoke(IPC.SETTINGS_SET, key, value),

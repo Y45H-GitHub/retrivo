@@ -6,6 +6,9 @@ import { registerIpcHandlers } from './ipc-handlers';
 import { startTextExpander, stopTextExpander } from './text-expander';
 import { getSetting } from './database';
 import { openVaultWindow } from './vault-window';
+import { applyContentSecurityPolicy } from './csp';
+import { initAutoUpdate } from './autoUpdate';
+import { is } from './env';
 import { DEFAULT_HOTKEY } from '../src/shared/constants';
 
 // Single instance lock — a second launch just focuses/wakes the existing instance.
@@ -18,6 +21,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    applyContentSecurityPolicy();
     const isFirstRun = initDatabase();
     registerIpcHandlers();
     createTray();
@@ -30,6 +34,9 @@ if (!gotLock) {
     // First launch only: open the Vault Manager so the template picker is actually visible,
     // since the app is otherwise tray-only and opens no window on its own.
     if (isFirstRun) openVaultWindow();
+
+    // Packaged builds only — checking for updates against a dev build is pointless and noisy.
+    if (!is.dev) initAutoUpdate();
 
     const launchAtStartup = getSetting('launchAtStartup');
     if (launchAtStartup === null) {

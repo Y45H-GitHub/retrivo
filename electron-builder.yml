@@ -4,6 +4,16 @@ directories:
   output: release
   buildResources: build
 
+# REQUIRED before shipping: replace owner/repo with your actual GitHub repository. This is what
+# electron-updater (electron/autoUpdate.ts) checks against for new releases — without a real
+# repo here, auto-update silently finds nothing and users never get patched. Publishing a build
+# with `electron-builder --publish always` (or a GITHUB_TOKEN env var set) uploads the installer
+# plus the latest.yml feed file electron-updater reads.
+publish:
+  provider: github
+  owner: YOUR_GITHUB_USERNAME
+  repo: YOUR_REPO_NAME
+
 # better-sqlite3 ships prebuilt binaries that already match Electron's ABI via
 # postinstall (electron-builder install-app-deps). uiohook-napi/robotjs need
 # Visual Studio Build Tools to compile from source, which may not be present on

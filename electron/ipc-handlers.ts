@@ -11,6 +11,8 @@ import { openVaultWindow } from './vault-window';
 import { openSettingsWindow } from './settings-window';
 import { refreshTextExpanderShortcuts } from './text-expander';
 import { registerGlobalHotkey } from './hotkey';
+import { encryptPayload, decryptPayload, WrongPassphraseError } from './exportCrypto';
+import { isValidVaultExport } from './validateImport';
 
 function broadcastVaultUpdated(): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -85,31 +87,52 @@ export function registerIpcHandlers(): void {
     return filePaths[0];
   });
 
-  ipcMain.handle(IPC.EXPORT_VAULT, async () => {
+  ipcMain.handle(IPC.EXPORT_VAULT, async (_e, passphrase: string) => {
+    if (!passphrase) return { ok: false, reason: 'no-passphrase' as const };
+
     const { profiles, fields } = db.exportAllProfilesAndFields();
     const payload: VaultExport = { version: 1, exportedAt: new Date().toISOString(), profiles, fields };
 
     const { canceled, filePath } = await dialog.showSaveDialog({
       title: 'Export FormVault Data',
-      defaultPath: path.join(app.getPath('documents'), 'formvault-export.json'),
-      filters: [{ name: 'FormVault Export', extensions: ['json'] }]
+      defaultPath: path.join(app.getPath('documents'), 'formvault-export.fvault'),
+      filters: [{ name: 'FormVault Encrypted Export', extensions: ['fvault'] }]
     });
-    if (canceled || !filePath) return { ok: false };
+    if (canceled || !filePath) return { ok: false, reason: 'cancelled' as const };
 
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    const encrypted = encryptPayload(JSON.stringify(payload), passphrase);
+    fs.writeFileSync(filePath, encrypted, 'utf8');
     return { ok: true, path: filePath };
   });
 
-  ipcMain.handle(IPC.IMPORT_VAULT, async () => {
+  ipcMain.handle(IPC.IMPORT_VAULT, async (_e, passphrase: string) => {
+    if (!passphrase) return { ok: false, reason: 'no-passphrase' as const };
+
     const { canceled, filePaths } = await dialog.showOpenDialog({
       title: 'Import FormVault Data',
-      filters: [{ name: 'FormVault Export', extensions: ['json'] }],
+      filters: [{ name: 'FormVault Encrypted Export', extensions: ['fvault'] }, { name: 'All Files', extensions: ['*'] }],
       properties: ['openFile']
     });
-    if (canceled || filePaths.length === 0) return { ok: false };
+    if (canceled || filePaths.length === 0) return { ok: false, reason: 'cancelled' as const };
 
     const raw = fs.readFileSync(filePaths[0], 'utf8');
-    const parsed = JSON.parse(raw) as VaultExport;
+
+    let decrypted: string;
+    try {
+      decrypted = decryptPayload(raw, passphrase);
+    } catch (err) {
+      if (err instanceof WrongPassphraseError) return { ok: false, reason: 'wrong-passphrase' as const };
+      return { ok: false, reason: 'invalid-file' as const };
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(decrypted);
+    } catch {
+      return { ok: false, reason: 'invalid-file' as const };
+    }
+    if (!isValidVaultExport(parsed)) return { ok: false, reason: 'invalid-file' as const };
+
     db.importProfilesAndFields(parsed.profiles, parsed.fields);
     broadcastVaultUpdated();
     return { ok: true };
@@ -145,6 +168,7 @@ export function registerIpcHandlers(): void {
     textExpansion: isTextExpanderAvailable()
   }));
   ipcMain.handle(IPC.SHOW_ITEM_IN_FOLDER, (_e, filePath: string) => {
+    if (!db.isKnownFilePath(filePath)) return;
     shell.showItemInFolder(filePath);
   });
 }

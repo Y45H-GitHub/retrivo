@@ -296,6 +296,12 @@ export function deleteFile(fileId: string): void {
   db.prepare('DELETE FROM file_refs WHERE id = ?').run(fileId);
 }
 
+/** Guards shell.showItemInFolder — only reveal paths the vault actually references, not any string a renderer sends. */
+export function isKnownFilePath(filePath: string): boolean {
+  const row = db.prepare('SELECT 1 FROM file_refs WHERE file_path = ? LIMIT 1').get(filePath);
+  return row !== undefined;
+}
+
 export function getSetting(key: string): string | null {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
   return row ? row.value : null;

@@ -6,6 +6,7 @@ import { cn } from '../shared/cn';
 import { Button } from '../shared/ui/Button';
 import { Switch } from '../shared/ui/Switch';
 import { Kbd } from '../shared/ui/Kbd';
+import { PassphraseDialog } from '../shared/ui/PassphraseDialog';
 import { useToast } from '../shared/ui/useToast';
 
 function codeToAcceleratorKey(code: string): string | null {
@@ -86,6 +87,7 @@ export function Settings() {
   const [launchAtStartup, setLaunchAtStartup] = useState(true);
   const [version, setVersion] = useState('');
   const [capabilities, setCapabilities] = useState({ autoPaste: true, textExpansion: true });
+  const [passphraseDialog, setPassphraseDialog] = useState<'export' | 'import' | null>(null);
 
   useEffect(() => {
     void ipc.getSettings().then((s) => {
@@ -120,16 +122,21 @@ export function Settings() {
     await ipc.setSetting('launchAtStartup', checked);
   }
 
-  async function handleExport() {
-    const result = await ipc.exportVault();
+  async function handleExport(passphrase: string) {
+    setPassphraseDialog(null);
+    const result = await ipc.exportVault(passphrase);
     if (result.ok) toast('success', `Exported to ${result.path}`);
-    else toast('info', 'Export cancelled');
+    else if (result.reason === 'cancelled') toast('info', 'Export cancelled');
+    else toast('error', 'Export failed. Please try again.');
   }
 
-  async function handleImport() {
-    const result = await ipc.importVault();
+  async function handleImport(passphrase: string) {
+    setPassphraseDialog(null);
+    const result = await ipc.importVault(passphrase);
     if (result.ok) toast('success', 'Vault imported successfully');
-    else toast('info', 'Import cancelled');
+    else if (result.reason === 'cancelled') toast('info', 'Import cancelled');
+    else if (result.reason === 'wrong-passphrase') toast('error', 'Incorrect passphrase, or not a valid FormVault export.');
+    else toast('error', 'Import failed. Please try again.');
   }
 
   const hotkeyParts = hotkey.replace('CommandOrControl', 'Ctrl').split('+');
@@ -171,17 +178,25 @@ export function Settings() {
         </SettingsGroup>
 
         <SettingsGroup title="Data">
-          <SettingsRow divider title="Export vault" description="Save all profiles and fields as a JSON file">
-            <Button size="sm" variant="secondary" onClick={() => void handleExport()}>
+          <SettingsRow divider title="Export vault" description="Save an encrypted backup of all profiles and fields">
+            <Button size="sm" variant="secondary" onClick={() => setPassphraseDialog('export')}>
               <DownloadSimple weight="regular" className="h-3.5 w-3.5" /> Export
             </Button>
           </SettingsRow>
           <SettingsRow title="Import vault" description="Restore from a previously exported file">
-            <Button size="sm" variant="secondary" onClick={() => void handleImport()}>
+            <Button size="sm" variant="secondary" onClick={() => setPassphraseDialog('import')}>
               <UploadSimple weight="regular" className="h-3.5 w-3.5" /> Import
             </Button>
           </SettingsRow>
         </SettingsGroup>
+
+        {passphraseDialog && (
+          <PassphraseDialog
+            mode={passphraseDialog}
+            onClose={() => setPassphraseDialog(null)}
+            onSubmit={(passphrase) => void (passphraseDialog === 'export' ? handleExport(passphrase) : handleImport(passphrase))}
+          />
+        )}
 
         <SettingsGroup title="About">
           <SettingsRow divider title="Version">
