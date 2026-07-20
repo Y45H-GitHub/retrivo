@@ -24,7 +24,7 @@ export function Switch({ checked, onChange, label, disabled }: SwitchProps) {
     >
       <span
         className={cn(
-          'absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full shadow-elevation-1',
+          'absolute left-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full shadow-elevation-1',
           checked ? 'translate-x-[18px] bg-accent-ink' : 'translate-x-[3px] bg-ink-secondary'
         )}
         style={{ transition: `transform var(--duration-base) var(--ease-spring)` }}
