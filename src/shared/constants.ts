@@ -52,5 +52,23 @@ export const IPC = {
   CLOSE_POPUP: 'app:close-popup',
   QUIT: 'app:quit',
   GET_APP_VERSION: 'app:get-version',
-  GET_CAPABILITIES: 'app:get-capabilities'
+  GET_CAPABILITIES: 'app:get-capabilities',
+
+  LOCK_STATE_CHANGED: 'lock:state-changed',
+  GET_LOCK_STATE: 'lock:get-state',
+  UNLOCK: 'lock:unlock',
+  LOCK_NOW: 'lock:lock-now',
+  SET_PIN: 'lock:set-pin',
+  REMOVE_PIN: 'lock:remove-pin'
 } as const;
+
+/** Idle time (via Electron's powerMonitor) after which the app auto-locks if a PIN is set. */
+export const AUTO_LOCK_IDLE_SECONDS = 15 * 60;
+
+/** Consecutive wrong-PIN attempts allowed before a cooldown kicks in. */
+export const MAX_PIN_ATTEMPTS = 5;
+
+/** Cooldown duration once MAX_PIN_ATTEMPTS is hit. */
+export const PIN_LOCKOUT_MS = 30_000;
+
+export const MIN_PIN_LENGTH = 4;

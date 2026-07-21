@@ -8,6 +8,7 @@ import { getSetting } from './database';
 import { openVaultWindow } from './vault-window';
 import { applyContentSecurityPolicy } from './csp';
 import { initAutoUpdate } from './autoUpdate';
+import { initLockState } from './lockState';
 import { is } from './env';
 import { DEFAULT_HOTKEY } from '../src/shared/constants';
 
@@ -23,6 +24,7 @@ if (!gotLock) {
   app.whenReady().then(() => {
     applyContentSecurityPolicy();
     const isFirstRun = initDatabase();
+    initLockState();
     registerIpcHandlers();
     createTray();
 

@@ -7,6 +7,7 @@ import { Button } from '../shared/ui/Button';
 import { Switch } from '../shared/ui/Switch';
 import { Kbd } from '../shared/ui/Kbd';
 import { PassphraseDialog } from '../shared/ui/PassphraseDialog';
+import { PinDialog } from '../shared/ui/PinDialog';
 import { useToast } from '../shared/ui/useToast';
 
 function codeToAcceleratorKey(code: string): string | null {
@@ -88,6 +89,8 @@ export function Settings() {
   const [version, setVersion] = useState('');
   const [capabilities, setCapabilities] = useState({ autoPaste: true, textExpansion: true });
   const [passphraseDialog, setPassphraseDialog] = useState<'export' | 'import' | null>(null);
+  const [pinConfigured, setPinConfigured] = useState(false);
+  const [pinDialog, setPinDialog] = useState<'set' | 'change' | 'remove' | null>(null);
 
   useEffect(() => {
     void ipc.getSettings().then((s) => {
@@ -97,7 +100,25 @@ export function Settings() {
     });
     void ipc.getAppVersion().then(setVersion);
     void ipc.getCapabilities().then(setCapabilities);
+    void ipc.getLockState().then((s) => setPinConfigured(s.pinConfigured));
   }, []);
+
+  async function handlePinDialogSubmit({ newPin, currentPin }: { newPin?: string; currentPin?: string }) {
+    if (pinDialog === 'remove') {
+      const result = await ipc.removePin(currentPin!);
+      if (result.ok) {
+        setPinConfigured(false);
+        toast('success', 'PIN lock turned off');
+      }
+      return result;
+    }
+    const result = await ipc.setPin(newPin!, currentPin ?? null);
+    if (result.ok) {
+      setPinConfigured(true);
+      toast('success', pinDialog === 'set' ? 'PIN set' : 'PIN changed');
+    }
+    return result;
+  }
 
   useEffect(() => {
     if (!recording) return;
@@ -177,6 +198,23 @@ export function Settings() {
           </SettingsRow>
         </SettingsGroup>
 
+        <SettingsGroup title="Security">
+          <SettingsRow
+            divider={pinConfigured}
+            title="PIN lock"
+            description="Require a PIN to open Retrivo on this device"
+          >
+            <Switch checked={pinConfigured} onChange={(v) => setPinDialog(v ? 'set' : 'remove')} label="PIN lock" />
+          </SettingsRow>
+          {pinConfigured && (
+            <SettingsRow title="Change PIN" description="Update the PIN used to unlock Retrivo">
+              <Button size="sm" variant="secondary" onClick={() => setPinDialog('change')}>
+                Change
+              </Button>
+            </SettingsRow>
+          )}
+        </SettingsGroup>
+
         <SettingsGroup title="Data">
           <SettingsRow divider title="Export vault" description="Save an encrypted backup of all profiles and fields">
             <Button size="sm" variant="secondary" onClick={() => setPassphraseDialog('export')}>
@@ -196,6 +234,10 @@ export function Settings() {
             onClose={() => setPassphraseDialog(null)}
             onSubmit={(passphrase) => void (passphraseDialog === 'export' ? handleExport(passphrase) : handleImport(passphrase))}
           />
+        )}
+
+        {pinDialog && (
+          <PinDialog mode={pinDialog} onClose={() => setPinDialog(null)} onSubmit={handlePinDialogSubmit} />
         )}
 
         <SettingsGroup title="About">

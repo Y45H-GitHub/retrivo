@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Gear } from '@phosphor-icons/react';
 import { ipc } from '../shared/ipc-client';
 import { CATEGORIES } from '../shared/constants';
+import { useLockState } from '../shared/useLockState';
 import { Kbd } from '../shared/ui/Kbd';
+import { LockScreen } from '../shared/ui/LockScreen';
 import { CategoryTabs } from './CategoryTabs';
 import { CopyFeedbackController, type CopyFeedbackState } from './copyFeedbackController';
 import { FieldList } from './FieldList';
@@ -12,6 +14,7 @@ import { SearchBar } from './SearchBar';
 import type { Category, Field, Profile } from '../shared/types';
 
 export function Popup() {
+  const { locked, unlock, markUnlocked } = useLockState();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [fields, setFields] = useState<Field[]>([]);
@@ -30,6 +33,14 @@ export function Popup() {
     })
   );
 
+  // Mirrors `locked` for listener closures below that intentionally keep an empty dep array -
+  // avoids fetching vault data into renderer memory while locked, without resubscribing IPC
+  // listeners on every lock-state change.
+  const lockedRef = useRef(locked);
+  useEffect(() => {
+    lockedRef.current = locked;
+  }, [locked]);
+
   const loadProfiles = useCallback(async () => {
     const [fetchedProfiles, settings] = await Promise.all([ipc.getProfiles(), ipc.getSettings()]);
     setProfiles(fetchedProfiles);
@@ -43,13 +54,15 @@ export function Popup() {
   }, []);
 
   useEffect(() => {
+    if (locked !== false) return;
     void loadProfiles();
     void ipc.getCapabilities().then((c) => setAutoPaste(c.autoPaste));
-  }, [loadProfiles]);
+  }, [loadProfiles, locked]);
 
   useEffect(() => {
+    if (locked !== false) return;
     if (activeProfileId) void loadFields(activeProfileId);
-  }, [activeProfileId, loadFields]);
+  }, [activeProfileId, loadFields, locked]);
 
   useEffect(() => {
     const offHotkey = ipc.onHotkeyTriggered(() => {
@@ -59,10 +72,11 @@ export function Popup() {
       copyControllerRef.current.reset();
       setCopyState('idle');
       setCopiedFieldId(null);
-      void loadProfiles();
+      if (lockedRef.current === false) void loadProfiles();
       searchRef.current?.focus();
     });
     const offUpdated = ipc.onVaultDataUpdated(() => {
+      if (lockedRef.current !== false) return;
       void loadProfiles();
       if (activeProfileId) void loadFields(activeProfileId);
     });
@@ -134,67 +148,73 @@ export function Popup() {
             '0 16px 48px rgb(var(--fv-shadow) / 0.28), 0 6px 16px rgb(var(--fv-shadow) / 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.06)'
         }}
       >
-        <SearchBar
-          ref={searchRef}
-          value={query}
-          onChange={setQuery}
-          onKeyDown={handleSearchKeyDown}
-          trailing={<ProfileSwitcher profiles={profiles} activeProfileId={activeProfileId} onSelect={setActiveProfileId} />}
-        />
+        {locked === null ? null : locked ? (
+          <LockScreen onUnlock={unlock} onUnlocked={markUnlocked} />
+        ) : (
+          <>
+            <SearchBar
+              ref={searchRef}
+              value={query}
+              onChange={setQuery}
+              onKeyDown={handleSearchKeyDown}
+              trailing={<ProfileSwitcher profiles={profiles} activeProfileId={activeProfileId} onSelect={setActiveProfileId} />}
+            />
 
-        <CategoryTabs activeCategory={category} availableCategories={availableCategories} onSelect={setCategory} />
+            <CategoryTabs activeCategory={category} availableCategories={availableCategories} onSelect={setCategory} />
 
-        <div className="border-t border-stroke-subtle" />
+            <div className="border-t border-stroke-subtle" />
 
-        <div className="flex-1 overflow-hidden pt-1">
-          <FieldList
-            items={items}
-            selectedIndex={selectedIndex}
-            hasAnyFields={hasAnyValuedFields}
-            copiedFieldId={copyState !== 'idle' ? copiedFieldId : null}
-            pasteLabel={autoPaste}
-            onSelect={(field) => void handleSelectField(field)}
-            onHoverIndex={setSelectedIndex}
-            onOpenVault={() => void ipc.openVaultManager()}
-          />
-        </div>
-
-        {fields.length > 0 && (
-          <div className="flex items-center justify-between border-t border-stroke-subtle px-3 py-2">
-            <div className="flex items-center gap-2.5 text-caption text-ink-muted">
-              <span className="flex items-center gap-1">
-                <Kbd>↑</Kbd>
-                <Kbd>↓</Kbd>
-              </span>
-              <span className="flex items-center gap-1">
-                <Kbd>↵</Kbd> {autoPaste ? 'Paste' : 'Copy'}
-              </span>
-              <span className="flex items-center gap-1">
-                <Kbd>Tab</Kbd> Category
-              </span>
-              <span className="flex items-center gap-1">
-                <Kbd>Esc</Kbd>
-              </span>
+            <div className="flex-1 overflow-hidden pt-1">
+              <FieldList
+                items={items}
+                selectedIndex={selectedIndex}
+                hasAnyFields={hasAnyValuedFields}
+                copiedFieldId={copyState !== 'idle' ? copiedFieldId : null}
+                pasteLabel={autoPaste}
+                onSelect={(field) => void handleSelectField(field)}
+                onHoverIndex={setSelectedIndex}
+                onOpenVault={() => void ipc.openVaultManager()}
+              />
             </div>
-            <div className="flex items-center gap-0.5">
-              <button
-                onClick={() => void ipc.openVaultManager()}
-                tabIndex={-1}
-                className="flex items-center gap-1 rounded-control px-1.5 py-1 text-caption font-medium text-ink-secondary transition-colors duration-fast hover:bg-hover hover:text-ink"
-              >
-                <Plus weight="regular" className="h-3.5 w-3.5" /> Add field
-              </button>
-              <button
-                onClick={() => void ipc.openSettings()}
-                tabIndex={-1}
-                aria-label="Settings"
-                title="Settings"
-                className="rounded-control p-1 text-ink-secondary transition-colors duration-fast hover:bg-hover hover:text-ink"
-              >
-                <Gear weight="regular" className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
+
+            {fields.length > 0 && (
+              <div className="flex items-center justify-between border-t border-stroke-subtle px-3 py-2">
+                <div className="flex items-center gap-2.5 text-caption text-ink-muted">
+                  <span className="flex items-center gap-1">
+                    <Kbd>↑</Kbd>
+                    <Kbd>↓</Kbd>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Kbd>↵</Kbd> {autoPaste ? 'Paste' : 'Copy'}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Kbd>Tab</Kbd> Category
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Kbd>Esc</Kbd>
+                  </span>
+                </div>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => void ipc.openVaultManager()}
+                    tabIndex={-1}
+                    className="flex items-center gap-1 rounded-control px-1.5 py-1 text-caption font-medium text-ink-secondary transition-colors duration-fast hover:bg-hover hover:text-ink"
+                  >
+                    <Plus weight="regular" className="h-3.5 w-3.5" /> Add field
+                  </button>
+                  <button
+                    onClick={() => void ipc.openSettings()}
+                    tabIndex={-1}
+                    aria-label="Settings"
+                    title="Settings"
+                    className="rounded-control p-1 text-ink-secondary transition-colors duration-fast hover:bg-hover hover:text-ink"
+                  >
+                    <Gear weight="regular" className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

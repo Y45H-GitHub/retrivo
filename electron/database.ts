@@ -319,6 +319,10 @@ export function setSetting(key: string, value: string): void {
   );
 }
 
+export function deleteSetting(key: string): void {
+  db.prepare('DELETE FROM settings WHERE key = ?').run(key);
+}
+
 export function exportAllProfilesAndFields(): { profiles: Profile[]; fields: Field[] } {
   const profiles = getProfiles();
   const fields = profiles.flatMap((p) => getFieldsForProfile(p.id));

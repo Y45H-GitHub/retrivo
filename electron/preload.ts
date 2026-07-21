@@ -48,6 +48,22 @@ const api = {
     const listener = () => callback();
     ipcRenderer.on(IPC.HOTKEY_TRIGGERED, listener);
     return () => ipcRenderer.removeListener(IPC.HOTKEY_TRIGGERED, listener);
+  },
+
+  getLockState: (): Promise<{ locked: boolean; pinConfigured: boolean }> => ipcRenderer.invoke(IPC.GET_LOCK_STATE),
+  unlock: (
+    pin: string
+  ): Promise<{ ok: boolean; reason?: 'wrong-pin' | 'locked-out'; retryAfterSeconds?: number }> =>
+    ipcRenderer.invoke(IPC.UNLOCK, pin),
+  lockNow: (): Promise<void> => ipcRenderer.invoke(IPC.LOCK_NOW),
+  setPin: (newPin: string, currentPin: string | null): Promise<{ ok: boolean; reason?: 'wrong-pin' | 'too-short' }> =>
+    ipcRenderer.invoke(IPC.SET_PIN, newPin, currentPin),
+  removePin: (currentPin: string): Promise<{ ok: boolean; reason?: 'wrong-pin' }> =>
+    ipcRenderer.invoke(IPC.REMOVE_PIN, currentPin),
+  onLockStateChanged: (callback: (locked: boolean) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, locked: boolean) => callback(locked);
+    ipcRenderer.on(IPC.LOCK_STATE_CHANGED, listener);
+    return () => ipcRenderer.removeListener(IPC.LOCK_STATE_CHANGED, listener);
   }
 };
 

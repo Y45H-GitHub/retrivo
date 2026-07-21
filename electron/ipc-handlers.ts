@@ -13,6 +13,8 @@ import { refreshTextExpanderShortcuts } from './text-expander';
 import { registerGlobalHotkey } from './hotkey';
 import { encryptPayload, decryptPayload, WrongPassphraseError } from './exportCrypto';
 import { isValidVaultExport } from './validateImport';
+import { isLocked, isPinConfigured, lock, removePin, setPin, unlock } from './lockState';
+import { refreshTrayMenu } from './tray';
 
 function broadcastVaultUpdated(): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -170,5 +172,19 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SHOW_ITEM_IN_FOLDER, (_e, filePath: string) => {
     if (!db.isKnownFilePath(filePath)) return;
     shell.showItemInFolder(filePath);
+  });
+
+  ipcMain.handle(IPC.GET_LOCK_STATE, () => ({ locked: isLocked(), pinConfigured: isPinConfigured() }));
+  ipcMain.handle(IPC.UNLOCK, (_e, pin: string) => unlock(pin));
+  ipcMain.handle(IPC.LOCK_NOW, () => lock());
+  ipcMain.handle(IPC.SET_PIN, (_e, newPin: string, currentPin: string | null) => {
+    const result = setPin(newPin, currentPin);
+    if (result.ok) refreshTrayMenu();
+    return result;
+  });
+  ipcMain.handle(IPC.REMOVE_PIN, (_e, currentPin: string) => {
+    const result = removePin(currentPin);
+    if (result.ok) refreshTrayMenu();
+    return result;
   });
 }
