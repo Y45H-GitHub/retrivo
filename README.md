@@ -6,7 +6,7 @@ A lightweight desktop productivity app that lives in the system tray. Press a gl
 
 **Download:** [latest release](https://github.com/Y45H-GitHub/retrivo/releases/latest) (Windows 10+, `Retrivo-Setup-<version>.exe`)
 
-> **Renamed from FormVault.** The GitHub repo, package name, app ID, and product name were all updated as part of a repositioning pivot — see the note under "Releasing / auto-update" below for what still needs to happen on GitHub's side before a new release can go out under this name.
+> **Renamed from FormVault.** The GitHub repo, package name, app ID, and product name were all updated as part of a repositioning pivot.
 
 ## Tech Stack
 
@@ -117,12 +117,6 @@ The app checks for updates on startup and every 4 hours
 (`electron/autoUpdate.ts`, via `electron-updater`), in packaged builds only,
 against [github.com/Y45H-GitHub/retrivo/releases](https://github.com/Y45H-GitHub/retrivo/releases).
 
-**Before the first release under this name:** the GitHub repo itself still needs
-to be renamed from `form-vault` to `retrivo` (Settings → General → Repository
-name) — `electron-builder.yml`'s `publish.repo` already points at `retrivo`,
-so publishing before the rename will fail to find the repo. GitHub redirects
-the old URL automatically once renamed, so existing stars/links keep working.
-
 To ship a release:
 
 1. Bump `version` in `package.json`.
@@ -132,9 +126,6 @@ To ship a release:
    the `latest.yml` feed file `electron-updater` reads, and — since
    `electron-builder.yml` sets `releaseType: release` — publishes it live
    immediately rather than as a draft.
-
-Until a release exists, the app runs fine — `checkForUpdatesAndNotify()`
-just finds nothing and silently no-ops.
 
 ### A note on the Electron version
 
