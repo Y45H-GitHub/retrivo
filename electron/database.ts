@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
 import Database from 'better-sqlite3';
@@ -141,8 +142,52 @@ function seedDefaultProfile(): boolean {
   return true;
 }
 
+function copyLegacyDb(legacyDbPath: string, newDbPath: string): void {
+  fs.mkdirSync(path.dirname(newDbPath), { recursive: true });
+  // Clear any stale sidecar files at the destination first, so a leftover WAL from the
+  // auto-seeded empty database can't end up paired with the legacy database file below.
+  for (const ext of ['', '-wal', '-shm']) {
+    const dest = newDbPath + ext;
+    if (fs.existsSync(dest)) fs.rmSync(dest);
+  }
+  fs.copyFileSync(legacyDbPath, newDbPath);
+  // Copy WAL/SHM sidecars too, in case the legacy app closed with uncheckpointed writes.
+  for (const ext of ['-wal', '-shm']) {
+    const src = legacyDbPath + ext;
+    if (fs.existsSync(src)) fs.copyFileSync(src, newDbPath + ext);
+  }
+}
+
+/**
+ * The FormVault → Retrivo rename changed the app's productName, which changes what Electron
+ * resolves app.getPath('userData') to on Windows (%APPDATA%\FormVault -> %APPDATA%\Retrivo).
+ * Existing installs upgrading to this build would otherwise open a brand new, empty database
+ * at the new path — the old data isn't deleted, just orphaned where the renamed app can't see it.
+ * This copies it forward once. If newDbPath already has real data (not just the auto-seeded
+ * empty profile), or the copy can't be safely verified, it's left alone.
+ */
+export function migrateLegacyInstall(legacyDbPath: string, newDbPath: string): void {
+  if (!fs.existsSync(legacyDbPath)) return;
+
+  if (!fs.existsSync(newDbPath)) {
+    copyLegacyDb(legacyDbPath, newDbPath);
+    return;
+  }
+
+  try {
+    const probe = new Database(newDbPath, { readonly: true });
+    const fieldCount = (probe.prepare('SELECT COUNT(*) as count FROM fields').get() as { count: number }).count;
+    probe.close();
+    if (fieldCount === 0) copyLegacyDb(legacyDbPath, newDbPath);
+  } catch {
+    // Can't safely inspect the existing DB - leave it alone rather than risk clobbering it.
+  }
+}
+
 export function initDatabase(): boolean {
   const dbPath = path.join(app.getPath('userData'), 'retrivo.sqlite3');
+  const legacyDbPath = path.join(path.dirname(app.getPath('userData')), 'FormVault', 'formvault.sqlite3');
+  migrateLegacyInstall(legacyDbPath, dbPath);
   db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
